@@ -45,8 +45,10 @@ static void run_if_block(char *first_line) {
 
 int main(void) {
     char *line;
-    while ((line = read_cmd(PROMPT)) != NULL) {
+    for (;;) {
         reap_jobs();
+        line = read_cmd(PROMPT);
+        if (!line) break;
         if (line[0] == '!') {
             char *expanded = history_command(line);
             free(line);
