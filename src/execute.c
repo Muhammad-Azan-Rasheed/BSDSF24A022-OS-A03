@@ -30,6 +30,3 @@ void print_jobs(void) { puts("Job control not yet implemented."); }
 void set_variable(const char *name, const char *value) { (void)name; (void)value; }
 const char *get_variable(const char *name) { (void)name; return NULL; }
 void print_variables(void) { }
-void remember_command(const char *line) { (void)line; }
-void print_history(void) { }
-char *history_command(const char *line) { (void)line; return NULL; }
