@@ -1,34 +1,25 @@
-# PUFCIT's custom UNIX Shell
+# myshell
 
-A simple command-line interpreter (shell) built in C for an Operating Systems course.
+A small POSIX command interpreter written in C for PA-03. It demonstrates process creation, built-ins, command history, Readline editing and completion, redirection, pipelines, command chaining, background jobs, conditional blocks, and shell variables.
 
-## Quick Start
+## Build and run
 
-### Build the Shell
+The project requires a POSIX environment, GCC or a compatible C compiler, GNU Make, and GNU Readline development headers/library.
 
-To compile the project, run the `make` command:
-```bash
+```sh
 make
+./bin/myshell
 ```
 
-### Run the Shell
+Remove generated objects and the executable with `make clean`.
 
-The compiled executable will be located in the `bin/` directory.
-```bash
-./bin/psh
-```
+## Features
 
-### Clean the Project
+- Built-ins: `cd`, `exit`, `help`, `history`, `jobs`, and `set`.
+- A 20-command history list with `!n` replay, plus Readline arrow-key history.
+- Tab completion for executable names and filenames.
+- `<` and `>` redirection, `|` pipelines, `;` sequential commands, and `&` background execution.
+- A basic multiline `if command` / `then` / optional `else` / `fi` construct.
+- Variable assignments such as `MESSAGE="Hello, World!"` and expansion using `$MESSAGE` or `${MESSAGE}`.
 
-To remove all compiled object files and the final executable:
-```bash
-make clean
-```
-
-## Directory Structure
-
-*   `/src`: All C source code files (`.c`).
-*   `/include`: All header files (`.h`).
-*   `/bin`: Contains the final compiled executable (`psh`).
-*   `/obj`: Contains intermediate object files (`.o`) created during compilation.
-*   `Makefile`: The build script for the project.
+The parser intentionally implements a small teaching subset. It does not provide full POSIX shell behavior such as command substitution, globbing, or nested conditionals.
