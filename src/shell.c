@@ -59,23 +59,47 @@ char *read_cmd(const char *prompt) {
 }
 
 char **tokenize(const char *line) {
-    size_t cap = 16, count = 0;
+    size_t cap = 16, count = 0, word_cap = 64, word_len = 0;
     char **tokens = calloc(cap, sizeof(*tokens));
     if (!tokens) return NULL;
-    char *copy = strdup(line);
-    if (!copy) { free(tokens); return NULL; }
-    char *save = NULL;
-    for (char *word = strtok_r(copy, " \t", &save); word; word = strtok_r(NULL, " \t", &save)) {
-        if (count + 1 >= cap) {
-            cap *= 2;
-            char **grown = realloc(tokens, cap * sizeof(*tokens));
-            if (!grown) { free(copy); free_tokens(tokens); return NULL; }
-            tokens = grown;
+    char *word = malloc(word_cap);
+    if (!word) { free(tokens); return NULL; }
+    char quote = 0;
+    bool active = false;
+    for (size_t i = 0;; ++i) {
+        char c = line[i];
+        if (quote) {
+            if (c == '\0') { fprintf(stderr, "syntax error: unmatched quote\n"); goto fail; }
+            if (c == quote) { quote = 0; active = true; continue; }
+            if (c == '\\' && quote == '"' && line[i + 1]) c = line[++i];
+        } else {
+            if (c == '\'' || c == '"') { quote = c; active = true; continue; }
+            if (c == '\\' && line[i + 1]) c = line[++i];
+            if (c == ' ' || c == '\t' || c == '\0' || strchr(";|&<>", c)) {
+                if (active) {
+                    word[word_len] = '\0';
+                    if (count + 1 >= cap) { cap *= 2; char **g = realloc(tokens, cap * sizeof(*g)); if (!g) goto fail; tokens = g; }
+                    tokens[count++] = strdup(word); word_len = 0; active = false;
+                }
+                if (strchr(";|&<>", c) && c) {
+                    char op[2] = {c, '\0'};
+                    if (count + 1 >= cap) { cap *= 2; char **g = realloc(tokens, cap * sizeof(*g)); if (!g) goto fail; tokens = g; }
+                    tokens[count++] = strdup(op);
+                }
+                if (!c) break;
+                continue;
+            }
         }
-        tokens[count++] = strdup(word);
+        if (word_len + 2 > word_cap) { word_cap *= 2; char *g = realloc(word, word_cap); if (!g) goto fail; word = g; }
+        word[word_len++] = c;
+        active = true;
     }
-    free(copy);
+    free(word);
     return tokens;
+fail:
+    free(word);
+    free_tokens(tokens);
+    return NULL;
 }
 
 void free_tokens(char **tokens) {
