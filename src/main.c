@@ -11,12 +11,7 @@ int main(void) {
             if (!line || !*line) { free(line); continue; }
         }
         if (*line) remember_command(line);
-        char **argv = tokenize(line);
-        if (argv && argv[0]) {
-            if (is_builtin(argv[0])) run_builtin(argv, true);
-            else execute_tokens(argv, line, false);
-        }
-        free_tokens(argv);
+        if (*line) execute_line(line);
         free(line);
     }
     puts("\nShell exited.");
