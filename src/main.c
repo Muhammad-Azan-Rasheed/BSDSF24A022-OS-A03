@@ -1,22 +1,16 @@
 #include "shell.h"
 
-int main() {
-    char* cmdline;
-    char** arglist;
-
-    while ((cmdline = read_cmd(PROMPT, stdin)) != NULL) {
-        if ((arglist = tokenize(cmdline)) != NULL) {
-            execute(arglist);
-
-            // Free the memory allocated by tokenize()
-            for (int i = 0; arglist[i] != NULL; i++) {
-                free(arglist[i]);
-            }
-            free(arglist);
+int main(void) {
+    char *line;
+    while ((line = read_cmd(PROMPT)) != NULL) {
+        char **argv = tokenize(line);
+        if (argv && argv[0]) {
+            if (is_builtin(argv[0])) run_builtin(argv, true);
+            else execute_tokens(argv, line, false);
         }
-        free(cmdline);
+        free_tokens(argv);
+        free(line);
     }
-
-    printf("\nShell exited.\n");
+    puts("\nShell exited.");
     return 0;
 }
