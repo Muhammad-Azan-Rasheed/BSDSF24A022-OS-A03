@@ -1,14 +1,61 @@
 #include "shell.h"
+#include <dirent.h>
+#include <ctype.h>
+
+static char **completion_items;
+static size_t completion_count;
+static size_t completion_pos;
+
+static char *completion_generator(const char *text, int state) {
+    if (!state) completion_pos = 0;
+    size_t n = strlen(text);
+    while (completion_pos < completion_count) {
+        const char *item = completion_items[completion_pos++];
+        if (!strncmp(item, text, n)) return strdup(item);
+    }
+    return NULL;
+}
+
+static char **complete_input(const char *text, int start, int end) {
+    (void)end;
+    for (size_t i = 0; i < completion_count; ++i) free(completion_items[i]);
+    free(completion_items);
+    completion_items = NULL;
+    completion_count = 0;
+    if (start != 0) return rl_completion_matches(text, rl_filename_completion_function);
+
+    char *path = strdup(getenv("PATH") ? getenv("PATH") : "");
+    if (!path) return NULL;
+    char *save = NULL;
+    for (char *dir = strtok_r(path, ":", &save); dir; dir = strtok_r(NULL, ":", &save)) {
+        DIR *dp = opendir(*dir ? dir : ".");
+        if (!dp) continue;
+        struct dirent *entry;
+        while ((entry = readdir(dp))) {
+            size_t len = strlen(dir) + strlen(entry->d_name) + 2;
+            char *full = malloc(len);
+            if (!full) continue;
+            snprintf(full, len, "%s/%s", *dir ? dir : ".", entry->d_name);
+            if (access(full, X_OK) == 0 && entry->d_name[0] != '.') {
+                char **grown = realloc(completion_items, (completion_count + 1) * sizeof(*grown));
+                if (grown) { completion_items = grown; completion_items[completion_count++] = strdup(entry->d_name); }
+            }
+            free(full);
+        }
+        closedir(dp);
+    }
+    const char *builtins[] = {"cd", "exit", "help", "history", "jobs", "set", NULL};
+    for (size_t i = 0; builtins[i]; ++i) {
+        char **grown = realloc(completion_items, (completion_count + 1) * sizeof(*grown));
+        if (grown) { completion_items = grown; completion_items[completion_count++] = strdup(builtins[i]); }
+    }
+    free(path);
+    return rl_completion_matches(text, completion_generator);
+}
 
 char *read_cmd(const char *prompt) {
-    fputs(prompt, stdout);
-    fflush(stdout);
-    char *line = NULL;
-    size_t cap = 0;
-    ssize_t n = getline(&line, &cap, stdin);
-    if (n < 0) { free(line); return NULL; }
-    if (n && line[n - 1] == '\n') line[n - 1] = '\0';
-    return line;
+    rl_attempted_completion_function = complete_input;
+    return readline(prompt);
 }
 
 char **tokenize(const char *line) {
