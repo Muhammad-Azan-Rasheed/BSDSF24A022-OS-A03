@@ -39,7 +39,8 @@ void free_tokens(char **tokens) {
 
 bool is_builtin(const char *name) {
     return name && (!strcmp(name, "exit") || !strcmp(name, "cd") ||
-                    !strcmp(name, "help") || !strcmp(name, "jobs"));
+                    !strcmp(name, "help") || !strcmp(name, "jobs") ||
+                    !strcmp(name, "history"));
 }
 
 int run_builtin(char **argv, bool parent_context) {
@@ -56,8 +57,45 @@ int run_builtin(char **argv, bool parent_context) {
         return 0;
     }
     if (!strcmp(argv[0], "jobs")) {
-        puts("Job control not yet implemented.");
+        print_jobs();
         return 0;
     }
+    if (!strcmp(argv[0], "history")) { print_history(); return 0; }
     return -1;
+}
+
+static char *history_entries[HISTORY_SIZE];
+static unsigned long history_total;
+
+void remember_command(const char *line) {
+    if (!line || !*line) return;
+    unsigned long slot = history_total % HISTORY_SIZE;
+    free(history_entries[slot]);
+    history_entries[slot] = strdup(line);
+    ++history_total;
+    add_history(line);
+}
+
+void print_history(void) {
+    unsigned long first = history_total > HISTORY_SIZE ? history_total - HISTORY_SIZE : 0;
+    for (unsigned long n = first; n < history_total; ++n) {
+        const char *line = history_entries[n % HISTORY_SIZE];
+        if (line) printf("%lu  %s\n", n + 1, line);
+    }
+}
+
+char *history_command(const char *line) {
+    if (!line || line[0] != '!') return NULL;
+    char *end = NULL;
+    errno = 0;
+    unsigned long n = strtoul(line + 1, &end, 10);
+    if (errno || end == line + 1 || *end || n == 0 || n > history_total ||
+        n <= history_total - (history_total > HISTORY_SIZE ? HISTORY_SIZE : history_total)) {
+        fprintf(stderr, "history: event not found: %s\n", line);
+        return strdup("");
+    }
+    const char *entry = history_entries[(n - 1) % HISTORY_SIZE];
+    if (!entry) { fprintf(stderr, "history: event not found: %s\n", line); return strdup(""); }
+    puts(entry);
+    return strdup(entry);
 }
