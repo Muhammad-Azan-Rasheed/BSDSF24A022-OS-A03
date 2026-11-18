@@ -5,6 +5,20 @@
 static char **completion_items;
 static size_t completion_count;
 static size_t completion_pos;
+static Variable *variables;
+
+static int append_text(char **word, size_t *length, size_t *capacity, const char *text) {
+    size_t n = strlen(text);
+    while (*length + n + 1 > *capacity) {
+        *capacity *= 2;
+        char *grown = realloc(*word, *capacity);
+        if (!grown) return -1;
+        *word = grown;
+    }
+    memcpy(*word + *length, text, n);
+    *length += n;
+    return 0;
+}
 
 static char *completion_generator(const char *text, int state) {
     if (!state) completion_pos = 0;
@@ -72,9 +86,41 @@ char **tokenize(const char *line) {
             if (c == '\0') { fprintf(stderr, "syntax error: unmatched quote\n"); goto fail; }
             if (c == quote) { quote = 0; active = true; continue; }
             if (c == '\\' && quote == '"' && line[i + 1]) c = line[++i];
+            if (c == '$' && quote == '"') {
+                size_t begin = i + 1, end = begin;
+                bool braced = line[begin] == '{';
+                if (braced) { begin++; end = begin; while (line[end] && line[end] != '}') ++end; }
+                else while (isalnum((unsigned char)line[end]) || line[end] == '_') ++end;
+                if (end > begin && (!braced || line[end] == '}')) {
+                    char *name = strndup(line + begin, end - begin);
+                    const char *value = name ? get_variable(name) : NULL;
+                    if (!value && name) value = getenv(name);
+                    if (append_text(&word, &word_len, &word_cap, value ? value : "") < 0) { free(name); goto fail; }
+                    free(name);
+                    active = true;
+                    i = braced ? end : end - 1;
+                    continue;
+                }
+            }
         } else {
             if (c == '\'' || c == '"') { quote = c; active = true; continue; }
             if (c == '\\' && line[i + 1]) c = line[++i];
+            if (c == '$') {
+                size_t begin = i + 1, end = begin;
+                bool braced = line[begin] == '{';
+                if (braced) { begin++; end = begin; while (line[end] && line[end] != '}') ++end; }
+                else while (isalnum((unsigned char)line[end]) || line[end] == '_') ++end;
+                if (end > begin && (!braced || line[end] == '}')) {
+                    char *name = strndup(line + begin, end - begin);
+                    const char *value = name ? get_variable(name) : NULL;
+                    if (!value && name) value = getenv(name);
+                    if (append_text(&word, &word_len, &word_cap, value ? value : "") < 0) { free(name); goto fail; }
+                    free(name);
+                    active = true;
+                    i = braced ? end : end - 1;
+                    continue;
+                }
+            }
             if (c == ' ' || c == '\t' || c == '\0' || strchr(";|&<>", c)) {
                 if (active) {
                     word[word_len] = '\0';
@@ -111,7 +157,7 @@ void free_tokens(char **tokens) {
 bool is_builtin(const char *name) {
     return name && (!strcmp(name, "exit") || !strcmp(name, "cd") ||
                     !strcmp(name, "help") || !strcmp(name, "jobs") ||
-                    !strcmp(name, "history"));
+                    !strcmp(name, "history") || !strcmp(name, "set"));
 }
 
 int run_builtin(char **argv, bool parent_context) {
@@ -124,7 +170,7 @@ int run_builtin(char **argv, bool parent_context) {
         return 0;
     }
     if (!strcmp(argv[0], "help")) {
-        puts("Built-ins: cd [directory], exit, help, jobs");
+        puts("Built-ins: cd [directory], exit, help, history, jobs, set");
         return 0;
     }
     if (!strcmp(argv[0], "jobs")) {
@@ -132,6 +178,7 @@ int run_builtin(char **argv, bool parent_context) {
         return 0;
     }
     if (!strcmp(argv[0], "history")) { print_history(); return 0; }
+    if (!strcmp(argv[0], "set")) { print_variables(); return 0; }
     return -1;
 }
 
@@ -169,4 +216,32 @@ char *history_command(const char *line) {
     if (!entry) { fprintf(stderr, "history: event not found: %s\n", line); return strdup(""); }
     puts(entry);
     return strdup(entry);
+}
+
+const char *get_variable(const char *name) {
+    for (Variable *item = variables; item; item = item->next)
+        if (!strcmp(item->name, name)) return item->value;
+    return NULL;
+}
+
+void set_variable(const char *name, const char *value) {
+    for (Variable *item = variables; item; item = item->next) {
+        if (!strcmp(item->name, name)) {
+            char *replacement = strdup(value);
+            if (replacement) { free(item->value); item->value = replacement; }
+            return;
+        }
+    }
+    Variable *item = calloc(1, sizeof(*item));
+    if (!item) return;
+    item->name = strdup(name);
+    item->value = strdup(value);
+    if (!item->name || !item->value) { free(item->name); free(item->value); free(item); return; }
+    item->next = variables;
+    variables = item;
+}
+
+void print_variables(void) {
+    for (Variable *item = variables; item; item = item->next)
+        printf("%s=%s\n", item->name, item->value);
 }

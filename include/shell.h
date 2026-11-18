@@ -21,6 +21,7 @@
 #define PROMPT "myshell> "
 
 typedef struct Job {
+    unsigned long id;
     pid_t pid;
     char *command;
     struct Job *next;

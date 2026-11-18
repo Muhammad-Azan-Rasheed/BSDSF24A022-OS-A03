@@ -7,18 +7,20 @@ typedef struct {
 } Stage;
 
 static Job *jobs;
+static unsigned long next_job_id = 1;
 static size_t job_count;
 
 static void add_job(pid_t pid, const char *command) {
     if (job_count >= MAX_JOBS) { fprintf(stderr, "jobs: job table full\n"); return; }
     Job *job = calloc(1, sizeof(*job));
     if (!job) return;
+    job->id = next_job_id++;
     job->pid = pid;
     job->command = strdup(command ? command : "");
     job->next = jobs;
     jobs = job;
     ++job_count;
-    printf("[%ld] %ld\n", (long)job_count, (long)pid);
+    printf("[%lu] %ld\n", job->id, (long)pid);
 }
 
 void reap_jobs(void) {
@@ -29,6 +31,7 @@ void reap_jobs(void) {
         while (*link) {
             if ((*link)->pid == pid) {
                 Job *done = *link;
+                printf("[%lu] Done %s\n", done->id, done->command);
                 *link = done->next;
                 free(done->command);
                 free(done);
@@ -43,7 +46,7 @@ void reap_jobs(void) {
 void print_jobs(void) {
     reap_jobs();
     for (Job *job = jobs; job; job = job->next)
-        printf("[%ld] Running %s\n", (long)job->pid, job->command);
+        printf("[%lu] Running %ld %s\n", job->id, (long)job->pid, job->command);
 }
 
 static int apply_redirection(Stage *stage) {
@@ -112,11 +115,28 @@ static void free_stages(Stage *stages, size_t count) {
     free(stages);
 }
 
+static bool store_assignment(const char *word) {
+    const char *equal = strchr(word, '=');
+    if (!equal || equal == word) return false;
+    for (const char *p = word; p < equal; ++p)
+        if (!( (*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') || *p == '_' || (p > word && *p >= '0' && *p <= '9') )) return false;
+    char *name = strndup(word, (size_t)(equal - word));
+    if (!name) return true;
+    set_variable(name, equal + 1);
+    free(name);
+    return true;
+}
+
 static int execute_segment(char **tokens, size_t begin, size_t end, const char *display, bool background) {
     if (begin >= end) return 0;
     Stage *stages = NULL;
     size_t n = 0;
     if (parse_stages(tokens, begin, end, &stages, &n) < 0) return 2;
+
+    if (n == 1 && stages[0].argv[0] && !stages[0].argv[1] && store_assignment(stages[0].argv[0])) {
+        free_stages(stages, n);
+        return 0;
+    }
 
     if (n == 1 && is_builtin(stages[0].argv[0]) && !background) {
         int saved_in = dup(STDIN_FILENO), saved_out = dup(STDOUT_FILENO);
